@@ -18,8 +18,8 @@ A modern, minimalistic Flutter app that uses AI to identify food and calculate n
 
 ## 🎨 Screenshots
 
-| Home Screen | Scanner | Results | History |
-|-------------|---------|---------|---------|
+| Home Screen                                   | Scanner                  | Results                       | History                 |
+| --------------------------------------------- | ------------------------ | ----------------------------- | ----------------------- |
 | Clean interface with scan and history buttons | Camera/Gallery selection | AI-powered nutrition analysis | View all previous scans |
 
 ## 🚀 Quick Start
@@ -34,26 +34,30 @@ A modern, minimalistic Flutter app that uses AI to identify food and calculate n
 ### Installation
 
 1. **Clone the repository**
+
    ```bash
    git clone <your-repo-url>
    cd foodcalscanner
    ```
 
 2. **Install dependencies**
+
    ```bash
    flutter pub get
    ```
 
 3. **Set up environment variables**
+
    ```bash
    # Copy the example environment file
    cp .env.example .env
-   
+
    # Edit .env and add your Gemini API key
    # Get your free API key from: https://aistudio.google.com/app/apikey
    ```
 
 4. **Add your API key to .env**
+
    ```env
    GEMINI_API_KEY=your_actual_api_key_here
    ```
@@ -95,6 +99,7 @@ The app uses environment variables to keep sensitive data secure:
 4. Copy the key to your `.env` file
 
 **Free Tier Limits:**
+
 - 1,500 requests per day
 - No cost for basic usage
 

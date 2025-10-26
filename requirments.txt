@@ -1,0 +1,965 @@
+# Food Calorie Scanner App - Complete Instructions for Copilot
+
+## Project Overview
+Create a Flutter app that lets users take photos of food, uses AI to identify the food and calculate calories, and stores the history locally. Keep it SIMPLE and use only FREE services.
+
+---
+
+## Step 1: Create New Flutter Project
+```bash
+flutter create food_calorie_scanner
+cd food_calorie_scanner
+```
+
+---
+
+## Step 2: Update pubspec.yaml
+
+Replace the dependencies section with:
+```yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # For taking photos
+  image_picker: ^1.0.4
+  
+  # For AI food recognition (FREE)
+  google_generative_ai: ^0.2.0
+  http: ^1.1.0
+  
+  # For storing history locally
+  sqflite: ^2.3.0
+  path_provider: ^2.1.1
+  path: ^1.8.3
+  
+  # For date formatting
+  intl: ^0.18.1
+```
+
+Run: `flutter pub get`
+
+---
+
+## Step 3: Add Permissions
+
+### Android Permissions
+File: `android/app/src/main/AndroidManifest.xml`
+
+Add these lines INSIDE the `<manifest>` tag, BEFORE `<application>`:
+```xml
+<uses-permission android:name="android.permission.CAMERA"/>
+<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+<uses-permission android:name="android.permission.INTERNET"/>
+```
+
+### iOS Permissions
+File: `ios/Runner/Info.plist`
+
+Add these lines INSIDE the `<dict>` tag:
+```xml
+<key>NSCameraUsageDescription</key>
+<string>We need camera access to scan food</string>
+<key>NSPhotoLibraryUsageDescription</key>
+<string>We need photo library access to select food images</string>
+```
+
+---
+
+## Step 4: Get Free Gemini API Key
+
+1. Go to: https://aistudio.google.com/app/apikey
+2. Sign in with Google account
+3. Click "Create API Key" button
+4. Copy the key (it starts with "AIza...")
+5. Save it - you'll use it in the code
+
+**Important: This is FREE with 1,500 requests per day limit**
+
+---
+
+## Step 5: Create Database Model
+
+Create file: `lib/models/food_scan.dart`
+```dart
+class FoodScan {
+  final int? id;
+  final String foodName;
+  final double calories;
+  final String protein;
+  final String carbs;
+  final String fat;
+  final String imagePath;
+  final DateTime timestamp;
+
+  FoodScan({
+    this.id,
+    required this.foodName,
+    required this.calories,
+    required this.protein,
+    required this.carbs,
+    required this.fat,
+    required this.imagePath,
+    required this.timestamp,
+  });
+
+  // Convert to Map for database
+  Map<String, dynamic> toMap() {
+    return {
+      'id': id,
+      'foodName': foodName,
+      'calories': calories,
+      'protein': protein,
+      'carbs': carbs,
+      'fat': fat,
+      'imagePath': imagePath,
+      'timestamp': timestamp.toIso8601String(),
+    };
+  }
+
+  // Create from Map (from database)
+  factory FoodScan.fromMap(Map<String, dynamic> map) {
+    return FoodScan(
+      id: map['id'],
+      foodName: map['foodName'],
+      calories: map['calories'],
+      protein: map['protein'],
+      carbs: map['carbs'],
+      fat: map['fat'],
+      imagePath: map['imagePath'],
+      timestamp: DateTime.parse(map['timestamp']),
+    );
+  }
+}
+```
+
+---
+
+## Step 6: Create Database Helper
+
+Create file: `lib/services/database_helper.dart`
+```dart
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
+import '../models/food_scan.dart';
+
+class DatabaseHelper {
+  static final DatabaseHelper instance = DatabaseHelper._init();
+  static Database? _database;
+
+  DatabaseHelper._init();
+
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDB('food_scans.db');
+    return _database!;
+  }
+
+  Future<Database> _initDB(String filePath) async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, filePath);
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: _createDB,
+    );
+  }
+
+  Future _createDB(Database db, int version) async {
+    await db.execute('''
+      CREATE TABLE food_scans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        foodName TEXT NOT NULL,
+        calories REAL NOT NULL,
+        protein TEXT NOT NULL,
+        carbs TEXT NOT NULL,
+        fat TEXT NOT NULL,
+        imagePath TEXT NOT NULL,
+        timestamp TEXT NOT NULL
+      )
+    ''');
+  }
+
+  // Save new scan
+  Future<int> insertScan(FoodScan scan) async {
+    final db = await database;
+    return await db.insert('food_scans', scan.toMap());
+  }
+
+  // Get all scans (newest first)
+  Future<List<FoodScan>> getAllScans() async {
+    final db = await database;
+    final result = await db.query(
+      'food_scans',
+      orderBy: 'timestamp DESC',
+    );
+    return result.map((map) => FoodScan.fromMap(map)).toList();
+  }
+
+  // Delete a scan
+  Future<int> deleteScan(int id) async {
+    final db = await database;
+    return await db.delete(
+      'food_scans',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  // Delete all scans
+  Future<void> deleteAllScans() async {
+    final db = await database;
+    await db.delete('food_scans');
+  }
+}
+```
+
+---
+
+## Step 7: Create Gemini AI Service
+
+Create file: `lib/services/gemini_service.dart`
+```dart
+import 'dart:io';
+import 'dart:convert';
+import 'package:google_generative_ai/google_generative_ai.dart';
+
+class GeminiService {
+  // REPLACE THIS WITH YOUR ACTUAL API KEY
+  static const String apiKey = 'YOUR_GEMINI_API_KEY_HERE';
+
+  Future<Map<String, dynamic>> analyzeFoodImage(File imageFile) async {
+    try {
+      // Create Gemini model
+      final model = GenerativeModel(
+        model: 'gemini-1.5-flash',
+        apiKey: apiKey,
+      );
+
+      // Read image as bytes
+      final imageBytes = await imageFile.readAsBytes();
+
+      // Create prompt
+      final prompt = TextPart(
+        'Analyze this food image and identify the food. '
+        'Provide estimated nutritional information per serving. '
+        'Return your response as a JSON object with these exact keys: '
+        'foodName (string), calories (number), protein (string with unit like "25g"), '
+        'carbs (string with unit like "30g"), fat (string with unit like "10g"). '
+        'If you cannot identify the food clearly, set foodName to "Unknown Food" '
+        'and provide estimated values. Only return the JSON, no other text.'
+      );
+
+      // Create image part
+      final imagePart = DataPart('image/jpeg', imageBytes);
+
+      // Send request
+      final response = await model.generateContent([
+        Content.multi([prompt, imagePart])
+      ]);
+
+      // Get response text
+      String responseText = response.text ?? '';
+      
+      // Clean up response (remove markdown code blocks if present)
+      responseText = responseText
+          .replaceAll('```json', '')
+          .replaceAll('```', '')
+          .trim();
+
+      // Parse JSON
+      final Map<String, dynamic> result = jsonDecode(responseText);
+
+      // Validate and return
+      return {
+        'foodName': result['foodName'] ?? 'Unknown Food',
+        'calories': (result['calories'] ?? 0).toDouble(),
+        'protein': result['protein']?.toString() ?? '0g',
+        'carbs': result['carbs']?.toString() ?? '0g',
+        'fat': result['fat']?.toString() ?? '0g',
+      };
+    } catch (e) {
+      print('Error analyzing image: $e');
+      // Return error response
+      return {
+        'foodName': 'Error analyzing food',
+        'calories': 0.0,
+        'protein': '0g',
+        'carbs': '0g',
+        'fat': '0g',
+      };
+    }
+  }
+}
+```
+
+**IMPORTANT: Replace `YOUR_GEMINI_API_KEY_HERE` with the actual API key you got from Step 4**
+
+---
+
+## Step 8: Create Home Screen
+
+Create file: `lib/screens/home_screen.dart`
+```dart
+import 'package:flutter/material.dart';
+import 'scanner_screen.dart';
+import 'history_screen.dart';
+
+class HomeScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Food Calorie Scanner'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.restaurant_menu,
+                size: 120,
+                color: Colors.green,
+              ),
+              SizedBox(height: 40),
+              Text(
+                'Scan Your Food',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              SizedBox(height: 10),
+              Text(
+                'Take a photo to get instant calorie information',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 50),
+              
+              // Scan Button
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => ScannerScreen()),
+                  );
+                },
+                icon: Icon(Icons.camera_alt, size: 28),
+                label: Text(
+                  'SCAN FOOD',
+                  style: TextStyle(fontSize: 18),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+              
+              SizedBox(height: 20),
+              
+              // History Button
+              OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => HistoryScreen()),
+                  );
+                },
+                icon: Icon(Icons.history),
+                label: Text('VIEW HISTORY'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.green,
+                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
+                  side: BorderSide(color: Colors.green, width: 2),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+## Step 9: Create Scanner Screen
+
+Create file: `lib/screens/scanner_screen.dart`
+```dart
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import '../services/gemini_service.dart';
+import '../services/database_helper.dart';
+import '../models/food_scan.dart';
+
+class ScannerScreen extends StatefulWidget {
+  @override
+  _ScannerScreenState createState() => _ScannerScreenState();
+}
+
+class _ScannerScreenState extends State<ScannerScreen> {
+  final ImagePicker _picker = ImagePicker();
+  final GeminiService _geminiService = GeminiService();
+  bool _isAnalyzing = false;
+  File? _imageFile;
+
+  Future<void> _takePhoto() async {
+    try {
+      final XFile? photo = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 70,
+      );
+      
+      if (photo != null) {
+        setState(() {
+          _imageFile = File(photo.path);
+        });
+        _analyzeImage(File(photo.path));
+      }
+    } catch (e) {
+      _showError('Error taking photo: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 70,
+      );
+      
+      if (image != null) {
+        setState(() {
+          _imageFile = File(image.path);
+        });
+        _analyzeImage(File(image.path));
+      }
+    } catch (e) {
+      _showError('Error picking image: $e');
+    }
+  }
+
+  Future<void> _analyzeImage(File imageFile) async {
+    setState(() => _isAnalyzing = true);
+
+    try {
+      // Analyze with Gemini AI
+      final result = await _geminiService.analyzeFoodImage(imageFile);
+
+      // Create FoodScan object
+      final scan = FoodScan(
+        foodName: result['foodName'],
+        calories: result['calories'],
+        protein: result['protein'],
+        carbs: result['carbs'],
+        fat: result['fat'],
+        imagePath: imageFile.path,
+        timestamp: DateTime.now(),
+      );
+
+      // Save to database
+      await DatabaseHelper.instance.insertScan(scan);
+
+      setState(() => _isAnalyzing = false);
+
+      // Show result
+      _showResultDialog(scan);
+    } catch (e) {
+      setState(() => _isAnalyzing = false);
+      _showError('Error analyzing image: $e');
+    }
+  }
+
+  void _showResultDialog(FoodScan scan) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(scan.foodName),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_imageFile != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(
+                    _imageFile!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+              SizedBox(height: 16),
+              _buildNutritionRow('Calories', '${scan.calories.toInt()} kcal', 
+                  Colors.orange, Icons.local_fire_department),
+              SizedBox(height: 8),
+              _buildNutritionRow('Protein', scan.protein, 
+                  Colors.red, Icons.fitness_center),
+              SizedBox(height: 8),
+              _buildNutritionRow('Carbs', scan.carbs, 
+                  Colors.blue, Icons.grain),
+              SizedBox(height: 8),
+              _buildNutritionRow('Fat', scan.fat, 
+                  Colors.yellow[700]!, Icons.water_drop),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context); // Go back to home
+            },
+            child: Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNutritionRow(String label, String value, Color color, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        SizedBox(width: 8),
+        Text(
+          '$label: ',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          value,
+          style: TextStyle(fontSize: 16),
+        ),
+      ],
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Scan Food'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+      ),
+      body: Center(
+        child: _isAnalyzing
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Colors.green),
+                  SizedBox(height: 20),
+                  Text(
+                    'Analyzing food...',
+                    style: TextStyle(fontSize: 18),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'This may take a few seconds',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ],
+              )
+            : Padding(
+                padding: const EdgeInsets.all(20.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.camera_alt_outlined,
+                      size: 100,
+                      color: Colors.grey[400],
+                    ),
+                    SizedBox(height: 40),
+                    Text(
+                      'Choose an option',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 40),
+                    
+                    // Camera Button
+                    ElevatedButton.icon(
+                      onPressed: _takePhoto,
+                      icon: Icon(Icons.camera_alt, size: 28),
+                      label: Text(
+                        'TAKE PHOTO',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 50,
+                          vertical: 18,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                    
+                    SizedBox(height: 20),
+                    
+                    // Gallery Button
+                    OutlinedButton.icon(
+                      onPressed: _pickFromGallery,
+                      icon: Icon(Icons.photo_library),
+                      label: Text('CHOOSE FROM GALLERY'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.green,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 18,
+                        ),
+                        side: BorderSide(color: Colors.green, width: 2),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+}
+```
+
+---
+
+## Step 10: Create History Screen
+
+Create file: `lib/screens/history_screen.dart`
+```dart
+import 'package:flutter/material.dart';
+import 'dart:io';
+import '../models/food_scan.dart';
+import '../services/database_helper.dart';
+import 'package:intl/intl.dart';
+
+class HistoryScreen extends StatefulWidget {
+  @override
+  _HistoryScreenState createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  List<FoodScan> _scans = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHistory();
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => _isLoading = true);
+    final scans = await DatabaseHelper.instance.getAllScans();
+    setState(() {
+      _scans = scans;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _deleteScan(int id) async {
+    await DatabaseHelper.instance.deleteScan(id);
+    _loadHistory();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Scan deleted')),
+    );
+  }
+
+  void _showDeleteConfirmation(int id) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Scan'),
+        content: Text('Are you sure you want to delete this scan?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteScan(id);
+            },
+            child: Text('DELETE', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showScanDetails(FoodScan scan) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(scan.foodName),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.file(
+                  File(scan.imagePath),
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              SizedBox(height: 16),
+              _buildDetailRow('Calories', '${scan.calories.toInt()} kcal'),
+              _buildDetailRow('Protein', scan.protein),
+              _buildDetailRow('Carbs', scan.carbs),
+              _buildDetailRow('Fat', scan.fat),
+              SizedBox(height: 8),
+              Text(
+                'Scanned: ${DateFormat('MMM dd, yyyy - hh:mm a').format(scan.timestamp)}',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('CLOSE'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$label:',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(value),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Scan History'),
+        backgroundColor: Colors.green,
+        foregroundColor: Colors.white,
+      ),
+      body: _isLoading
+          ? Center(child: CircularProgressIndicator())
+          : _scans.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.history,
+                        size: 80,
+                        color: Colors.grey[400],
+                      ),
+                      SizedBox(height: 20),
+                      Text(
+                        'No scans yet',
+                        style: TextStyle(
+                          fontSize: 20,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      SizedBox(height: 10),
+                      Text(
+                        'Start scanning food to see history',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: EdgeInsets.all(8),
+                  itemCount: _scans.length,
+                  itemBuilder: (context, index) {
+                    final scan = _scans[index];
+                    return Card(
+                      margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      child: ListTile(
+                        leading: ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.file(
+                            File(scan.imagePath),
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                        title: Text(
+                          scan.foodName,
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        subtitle: Text(
+                          '${scan.calories.toInt()} kcal • ${DateFormat('MMM dd, yyyy').format(scan.timestamp)}',
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete, color: Colors.red),
+                          onPressed: () => _showDeleteConfirmation(scan.id!),
+                        ),
+                        onTap: () => _showScanDetails(scan),
+                      ),
+                    );
+                  },
+                ),
+    );
+  }
+}
+```
+
+---
+
+## Step 11: Update Main File
+
+Replace entire `lib/main.dart` with:
+```dart
+import 'package:flutter/material.dart';
+import 'screens/home_screen.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Food Calorie Scanner',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        primarySwatch: Colors.green,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: HomeScreen(),
+    );
+  }
+}
+```
+
+---
+
+## Step 12: Final Folder Structure
+
+Your project should look like this:
+```
+food_calorie_scanner/
+├── lib/
+│   ├── main.dart
+│   ├── models/
+│   │   └── food_scan.dart
+│   ├── services/
+│   │   ├── database_helper.dart
+│   │   └── gemini_service.dart
+│   └── screens/
+│       ├── home_screen.dart
+│       ├── scanner_screen.dart
+│       └── history_screen.dart
+├── android/
+├── ios/
+└── pubspec.yaml
+```
+
+---
+
+## Step 13: Run the App
+```bash
+# For Android
+flutter run
+
+# For iOS
+flutter run
+
+# For specific device
+flutter devices  # See available devices
+flutter run -d <device_id>
+```
+
+---
+
+## IMPORTANT REMINDERS
+
+### Before Running:
+1. ✅ Replace `YOUR_GEMINI_API_KEY_HERE` in `gemini_service.dart` with your actual API key
+2. ✅ Run `flutter pub get` to install packages
+3. ✅ Make sure camera permissions are added
+4. ✅ Test on a real device (camera doesn't work on emulators)
+
+### How the App Works:
+1. User opens app → sees home screen
+2. Taps "SCAN FOOD" → goes to scanner screen
+3. Takes photo or picks from gallery
+4. App shows "Analyzing..." spinner
+5. Gemini AI analyzes the image
+6. App saves result to SQLite database
+7. Shows popup with food name and calories
+8. User can view all scans in History screen
+9. Can delete individual scans
+
+### Free Limits:
+- ✅ 1,500 Gemini API requests per day (FREE)
+- ✅ Unlimited local storage (SQLite)
+- ✅ No backend costs
+- ✅ No subscription needed
+
+### Troubleshooting:
+- **Camera not working?** → Test on real device, not emulator
+- **API error?** → Check if API key is correct
+- **Build error?** → Run `flutter clean` then `flutter pub get`
+- **Image not showing?** → Check file permissions
+
+---
+
+## That's It! 🎉
+
+Your food calorie scanner app is ready. Simple, free, and functional!
