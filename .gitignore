@@ -46,3 +46,19 @@ app.*.map.json
 
 # Environment variables (keep private)
 .env
+
+# Android signing keys
+key.properties
+*.keystore
+*.jks
+
+# Build artifacts and archives
+*.apk
+*.aab
+*.ipa
+*.zip
+*.tar.gz
+
+# Documents (avoid committing large PDFs or reports)
+*.pdf
+

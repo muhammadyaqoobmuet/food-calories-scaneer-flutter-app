@@ -1,191 +1,162 @@
-# 🍽️ FoodCal Scanner
+<!--
+  Modern README for FoodCal Scanner
+  - Clean structure
+  - Badges
+  - Quick links (APK)
+  - Install / Run / Dev notes
+  - .gitignore guidance
+-->
 
-A modern, minimalistic Flutter app that uses AI to identify food and calculate nutritional information from photos. Built with Google's Gemini AI for accurate food recognition and nutrition analysis.
+# FoodCal Scanner
 
-![Flutter](https://img.shields.io/badge/Flutter-3.9.2+-blue.svg)
-![License](https://img.shields.io/badge/License-MIT-green.svg)
-![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-lightgrey.svg)
+![Flutter](https://img.shields.io/badge/Flutter-3.9+-02569B?logo=flutter&logoColor=white)
+![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS-lightgrey)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-## ✨ Features
+A modern, minimal Flutter app that uses AI to identify food from photos and estimate nutritional information (calories & macronutrients). Designed for fast capture, offline history, and a clean UX.
 
-- 📸 **Camera Integration** - Take photos or select from gallery
-- 🤖 **AI Food Recognition** - Powered by Google Gemini AI
-- 📊 **Nutrition Analysis** - Calories, protein, carbs, and fat content
-- 💾 **Local Storage** - SQLite database for offline access
-- 📱 **Modern UI** - Clean, minimalistic design with smooth animations
-- 🔒 **Secure** - Environment variables for API key protection
-- 🆓 **Free** - No backend costs, uses free Gemini API tier
+Download the latest Android build (APK):
 
-## 🎨 Screenshots
+[Download app-release.apk](https://www.mediafire.com/file/99f1kc88dnic2go/app-release.apk/file)
 
-| Home Screen                                   | Scanner                  | Results                       | History                 |
-| --------------------------------------------- | ------------------------ | ----------------------------- | ----------------------- |
-| Clean interface with scan and history buttons | Camera/Gallery selection | AI-powered nutrition analysis | View all previous scans |
+## Table of contents
 
-## 🚀 Quick Start
+- [Why this app](#why-this-app)
+- [Features](#features)
+- [Screenshots](#screenshots)
+- [Quick start](#quick-start)
+- [Developer notes](#developer-notes)
+- [Data & Storage](#data--storage)
+- [Security & Secrets](#security--secrets)
+- [Recommended .gitignore additions](#recommended-gitignore-additions)
+- [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [License](#license)
 
-### Prerequisites
+## Why this app
 
-- Flutter SDK 3.9.2 or higher
-- Android Studio / VS Code
-- Android/iOS device or emulator
-- Google account for Gemini API
+Manual food logging is slow and error-prone. FoodCal Scanner makes it simple: take a photo, get an AI-powered estimate of calories and macros, and save the result locally for later review.
 
-### Installation
+## Features
 
-1. **Clone the repository**
+- Fast photo-based food capture (camera + gallery)
+- AI-powered food recognition (Google Gemini API)
+- Estimated nutrition: calories, protein, carbs, fat
+- Local history (SQLite) for offline access
+- Clean, responsive UI for mobile devices
+- Environment-based API key management
 
-   ```bash
-   git clone <your-repo-url>
-   cd foodcalscanner
-   ```
+## Screenshots
 
-2. **Install dependencies**
+Add your screenshots to `assets/screenshots/` and reference them here:
 
-   ```bash
-   flutter pub get
-   ```
+![Home placeholder](assets/screenshots/home.png)
+![Scanner placeholder](assets/screenshots/scanner.png)
+![History placeholder](assets/screenshots/history.png)
 
-3. **Set up environment variables**
+Replace the above images with real screenshots captured from your emulator/device.
 
-   ```bash
-   # Copy the example environment file
-   cp .env.example .env
+## Quick start
 
-   # Edit .env and add your Gemini API key
-   # Get your free API key from: https://aistudio.google.com/app/apikey
-   ```
-
-4. **Add your API key to .env**
-
-   ```env
-   GEMINI_API_KEY=your_actual_api_key_here
-   ```
-
-5. **Run the app**
-   ```bash
-   flutter run
-   ```
-
-## 🏗️ Project Structure
-
-```
-lib/
-├── main.dart                 # App entry point
-├── models/
-│   └── food_scan.dart       # Data model for food scans
-├── services/
-│   ├── database_helper.dart # SQLite database operations
-│   └── gemini_service.dart  # AI service for food analysis
-└── screens/
-    ├── home_screen.dart     # Main landing page
-    ├── scanner_screen.dart  # Camera/gallery interface
-    └── history_screen.dart  # Scan history viewer
-```
-
-## 🔧 Configuration
-
-### Environment Variables
-
-The app uses environment variables to keep sensitive data secure:
-
-- `GEMINI_API_KEY`: Your Google Gemini AI API key
-
-### API Setup
-
-1. Visit [Google AI Studio](https://aistudio.google.com/app/apikey)
-2. Sign in with your Google account
-3. Create a new API key
-4. Copy the key to your `.env` file
-
-**Free Tier Limits:**
-
-- 1,500 requests per day
-- No cost for basic usage
-
-## 🎯 How It Works
-
-1. **Capture**: Take a photo of food or select from gallery
-2. **Analyze**: Gemini AI identifies the food and calculates nutrition
-3. **Store**: Results are saved locally using SQLite
-4. **Review**: Browse scan history with detailed nutrition info
-
-## 🛠️ Built With
-
-- **[Flutter](https://flutter.dev/)** - UI framework
-- **[Google Generative AI](https://pub.dev/packages/google_generative_ai)** - Food recognition
-- **[SQLite](https://pub.dev/packages/sqflite)** - Local database
-- **[Image Picker](https://pub.dev/packages/image_picker)** - Camera/gallery access
-- **[Flutter Dotenv](https://pub.dev/packages/flutter_dotenv)** - Environment variables
-
-## 📱 Supported Platforms
-
-- ✅ Android 5.0+ (API 21+)
-- ✅ iOS 11.0+
-- ❌ Web (camera limitations)
-- ❌ Desktop (not optimized)
-
-## 🔒 Security
-
-- API keys stored in environment variables
-- `.env` file excluded from version control
-- No sensitive data in source code
-- Local data storage only
-
-## 🧪 Testing
+Clone, configure, and run:
 
 ```bash
-# Run all tests
-flutter test
-
-# Check for issues
-flutter analyze
-
-# Check dependencies
-flutter pub deps
+git clone <your-repo-url>
+cd foodcalscanner
+flutter pub get
+# copy example env and add your GEMINI_API_KEY
+cp .env.example .env
+# Edit .env and set GEMINI_API_KEY and GEMINI_MODEL (no surrounding quotes recommended)
+flutter run
 ```
 
-## 📋 TODO
+Notes:
 
-- [ ] Add more detailed nutrition information
-- [ ] Implement food portion size estimation
-- [ ] Add meal planning features
-- [ ] Support for multiple food items in one photo
-- [ ] Export data functionality
-- [ ] Dark mode theme
+- To build an APK: `flutter build apk --release` (or use Android Studio)
+- Web: some AI features may not work in Chrome due to CORS or unsupported native packages; the app includes fallbacks.
 
-## 🤝 Contributing
+## Developer notes
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Entry point: `lib/main.dart`
+- Screens: `lib/screens/` (home, scanner, history)
+- Services: `lib/services/` (Gemini AI wrapper, database helper)
+- Models: `lib/models/` (data classes)
+- Utils: `lib/utils/` (platform-aware helpers)
 
-## 📄 License
+If you change the Gemini integration, keep the `analyzeFoodBytes(Uint8List)` contract so the scanner (which reads image bytes) works across platforms.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## Data & Storage
 
-## 🙏 Acknowledgments
+- Local DB: SQLite (`sqflite`) on mobile. For web, the app currently uses an in-memory fallback; consider using `sembast`/`sembast_web` for persistent web storage.
+- Images: stored as base64 data URLs for cross-platform compatibility. This is simple and reliable but increases DB size by ~33% due to base64 expansion.
 
-- Google Gemini AI for food recognition
-- Flutter team for the amazing framework
-- Contributors and testers
+## Security & Secrets
 
-## 📞 Support
+- Keep your `GEMINI_API_KEY` private. Use `.env` (and `flutter_dotenv`) to load keys at runtime.
+- Do not commit `.env`, keystores, or credentials to Git.
 
-If you encounter any issues:
+## Recommended .gitignore additions
 
-1. Check the [troubleshooting guide](SETUP_INSTRUCTIONS.md)
-2. Create an issue on GitHub
-3. Ensure your API key is properly configured
+I've updated `.gitignore` with common exclusions; additionally, consider these entries to avoid leaking sensitive files and bulky artifacts:
 
-## 🔗 Links
+```
+# environment & secrets
+.env
 
-- [Flutter Documentation](https://docs.flutter.dev/)
-- [Google AI Studio](https://aistudio.google.com/)
-- [Gemini API Documentation](https://ai.google.dev/docs)
+# Flutter/Dart
+.dart_tool/
+/build/
+
+# Android
+/android/key.properties
+*.keystore
+*.jks
+
+# iOS
+Pods/
+Runner/GeneratedPluginRegistrant.*
+
+# Archives, exports, and big documents you don't want in git
+*.apk
+*.aab
+*.ipa
+*.zip
+*.tar.gz
+*.pdf
+
+# OS files
+.DS_Store
+Thumbs.db
+```
+
+Explanation: PDFs and binary releases (APK/AAB) are commonly large and often not suitable for source control—keep builds in release assets or a separate storage (releases in GitHub, S3, etc.).
+
+## Troubleshooting
+
+- If analysis shows "Error analyzing food":
+  - Check terminal logs for the real exception (the app now surfaces Gemini errors).
+  - Verify `GEMINI_API_KEY` in `.env` (avoid extra surrounding quotes).
+  - If running on web, the AI package may be unsupported or blocked by CORS — run on a mobile emulator/device or use a server proxy.
+
+## Contributing
+
+Contributions are welcome. Follow these steps:
+
+1. Fork the repo
+2. Create a branch: `git checkout -b feature/your-feature`
+3. Commit and push
+4. Open a pull request with a clear description and screenshots
+
+## License
+
+This project is licensed under the MIT License — see `LICENSE` for details.
 
 ---
 
-**Made with ❤️ using Flutter**
+If you want, I can:
+
+- embed real screenshots into this README (I can capture emulator screenshots if you allow me to run the app),
+- add a short Troubleshooting section for specific Gemini/API errors we observed,
+- switch web storage from in-memory fallback to persistent `sembast_web` and update README with instructions.
+
+Made with ❤️ — update content as your project evolves.

@@ -1,18 +1,26 @@
-import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
 class GeminiService {
   // Get API key from environment variables
   static String get apiKey {
-    final key = dotenv.env['GEMINI_API_KEY'];
-    if (key == null || key.isEmpty) {
+    final raw = dotenv.env['GEMINI_API_KEY'];
+    if (raw == null || raw.trim().isEmpty) {
       throw Exception(
         'GEMINI_API_KEY not found in environment variables. '
         'Please add your API key to the .env file as GEMINI_API_KEY.',
       );
     }
+
+    // Trim surrounding whitespace and optional surrounding quotes
+    var key = raw.trim();
+    if ((key.startsWith('"') && key.endsWith('"')) ||
+        (key.startsWith("'") && key.endsWith("'"))) {
+      key = key.substring(1, key.length - 1);
+    }
+
     return key;
   }
 
@@ -23,20 +31,21 @@ class GeminiService {
       throw Exception(
         'GEMINI_MODEL not found in environment variables. '
         'Please add GEMINI_MODEL to your .env (example: GEMINI_MODEL=gemini-1.5-flash) '
-        'or set it to a model you have access to.');
+        'or set it to a model you have access to.',
+      );
     }
     return model;
   }
 
-  Future<Map<String, dynamic>> analyzeFoodImage(File imageFile) async {
+  // New API: accept image bytes so this service works on all platforms (including web)
+  Future<Map<String, dynamic>> analyzeFoodBytes(Uint8List imageBytes) async {
     try {
       // Helper to attempt generateContent with a given model string and return parsed result
       Future<Map<String, dynamic>> _attemptWithModel(String modelStr) async {
         print('Attempting model: $modelStr');
         final model = GenerativeModel(model: modelStr, apiKey: apiKey);
 
-        // Read image as bytes
-        final imageBytes = await imageFile.readAsBytes();
+        // Use provided imageBytes
 
         // Create prompt
         final prompt = TextPart(
@@ -59,7 +68,9 @@ class GeminiService {
 
         // Debug: print raw response and its runtime type so failures are easier to diagnose
         try {
-          print('Gemini raw response (runtimeType=${response.runtimeType}): $response');
+          print(
+            'Gemini raw response (runtimeType=${response.runtimeType}): $response',
+          );
         } catch (e) {
           print('Could not print raw Gemini response: $e');
         }
@@ -89,12 +100,17 @@ class GeminiService {
         }
 
         if (responseText.trim().isEmpty) {
-          print('Empty response text from model; full response object: $response');
+          print(
+            'Empty response text from model; full response object: $response',
+          );
           throw Exception('Empty response from model');
         }
 
         // Clean up response (remove markdown code blocks if present)
-        responseText = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
+        responseText = responseText
+            .replaceAll('```json', '')
+            .replaceAll('```', '')
+            .trim();
 
         // If the response contains other text around a JSON object, try to extract the first {...}
         String jsonCandidate = responseText;
@@ -109,7 +125,9 @@ class GeminiService {
         try {
           result = jsonDecode(jsonCandidate) as Map<String, dynamic>;
         } catch (e) {
-          print('Failed to parse JSON from model response. responseText="$responseText"');
+          print(
+            'Failed to parse JSON from model response. responseText="$responseText"',
+          );
           rethrow;
         }
 
@@ -155,17 +173,10 @@ class GeminiService {
           rethrow;
         }
       }
-
     } catch (e, st) {
       print('Error analyzing image: $e\n$st');
-      // Return error response
-      return {
-        'foodName': 'Error analyzing food',
-        'calories': 0.0,
-        'protein': '0g',
-        'carbs': '0g',
-        'fat': '0g',
-      };
+      // Rethrow a clear exception so UI can show the real error instead of a silent placeholder
+      throw Exception('Error analyzing image: $e');
     }
   }
 }

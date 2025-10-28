@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'dart:io';
+import '../utils/image_widget.dart';
 import '../models/food_scan.dart';
 import '../services/database_helper.dart';
 import 'package:intl/intl.dart';
@@ -88,11 +88,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Food Image
+              // Food Image (supports data URL, network/blob, and local file on mobile)
               ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: Image.file(
-                  File(scan.imagePath),
+                child: buildImageWidget(
+                  scan.imagePath,
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,
@@ -261,8 +261,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                     contentPadding: const EdgeInsets.all(16),
                     leading: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(scan.imagePath),
+                      child: buildImageWidget(
+                        scan.imagePath,
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,

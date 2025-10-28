@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'dart:typed_data';
+import 'dart:convert';
 import '../services/gemini_service.dart';
 import '../services/database_helper.dart';
 import '../models/food_scan.dart';
@@ -16,7 +17,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   final ImagePicker _picker = ImagePicker();
   final GeminiService _geminiService = GeminiService();
   bool _isAnalyzing = false;
-  File? _imageFile;
+  Uint8List? _imageBytes;
 
   Future<void> _takePhoto() async {
     try {
@@ -26,10 +27,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
       );
 
       if (photo != null) {
+        final bytes = await photo.readAsBytes();
         setState(() {
-          _imageFile = File(photo.path);
+          _imageBytes = bytes;
         });
-        _analyzeImage(File(photo.path));
+        await _analyzeImage(bytes, photo);
       }
     } catch (e) {
       _showError('Error taking photo: $e');
@@ -44,22 +46,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
       );
 
       if (image != null) {
+        final bytes = await image.readAsBytes();
         setState(() {
-          _imageFile = File(image.path);
+          _imageBytes = bytes;
         });
-        _analyzeImage(File(image.path));
+        await _analyzeImage(bytes, image);
       }
     } catch (e) {
       _showError('Error picking image: $e');
     }
   }
 
-  Future<void> _analyzeImage(File imageFile) async {
+  Future<void> _analyzeImage(Uint8List imageBytes, XFile? xfile) async {
     setState(() => _isAnalyzing = true);
 
     try {
-      // Analyze with Gemini AI
-      final result = await _geminiService.analyzeFoodImage(imageFile);
+      // Analyze with Gemini AI using bytes (works on web and mobile)
+      final result = await _geminiService.analyzeFoodBytes(imageBytes);
+
+      // Store image as base64 data URL for cross-platform display and web compatibility
+      final imagePath = 'data:image/jpeg;base64,' + base64Encode(imageBytes);
 
       // Create FoodScan object
       final scan = FoodScan(
@@ -68,7 +74,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         protein: result['protein'],
         carbs: result['carbs'],
         fat: result['fat'],
-        imagePath: imageFile.path,
+        imagePath: imagePath,
         timestamp: DateTime.now(),
       );
 
@@ -95,12 +101,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Food Image
-              if (_imageFile != null)
+              // Food Image (use Image.memory which works on web and mobile)
+              if (_imageBytes != null)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(16),
-                  child: Image.file(
-                    _imageFile!,
+                  child: Image.memory(
+                    _imageBytes!,
                     height: 200,
                     width: double.infinity,
                     fit: BoxFit.cover,
