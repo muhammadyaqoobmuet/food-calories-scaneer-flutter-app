@@ -60,5 +60,5 @@ key.properties
 *.tar.gz
 
 # Documents (avoid committing large PDFs or reports)
-*.pdf
+pdf
 
