@@ -46,18 +46,10 @@ Manual food logging is slow and error-prone. FoodCal Scanner makes it simple: ta
 - Clean, responsive UI for mobile devices
 - Environment-based API key management
 
-## Screenshots
 
-Add your screenshots to `assets/screenshots/` and reference them here:
-
-![Home placeholder](assets/screenshots/home.png)
-![Scanner placeholder](assets/screenshots/scanner.png)
-![History placeholder](assets/screenshots/history.png)
-
-Replace the above images with real screenshots captured from your emulator/device.
 
 ## Quick start
-
+just download apk dont strugle too much LOL
 Clone, configure, and run:
 
 ```bash
